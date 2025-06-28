@@ -72,6 +72,25 @@ class Value:
         out._backward = _backward
         
         return out
+    
+    def log(self):
+        x = max(self.data, 1e-8)
+        out = Value(math.log(x), (self,), "Log")
+        
+        def _backward():
+            self.grad += (1 / out.data) * out.grad
+        out._backward = _backward
+        
+        return out
+    
+    def sigmoid(self):
+        out = Value(1 / (1 + math.exp(-self.data)), (self,), "Sigmoid")
+        
+        def _backward():
+            self.grad += out.data * (1 - out.data) * out.grad
+        out._backward = _backward
+        
+        return out
 
     def __truediv__(self, other):
         return self * other**-1
