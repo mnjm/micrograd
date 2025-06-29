@@ -4,7 +4,7 @@ from micrograd.engine import Tensor
 
 tol = 1e-6  # float tollerence
 
-def test_broadcasting():
+def test_add_broadcasting():
     a = Tensor([[1.0, 2.0], [3.0, 4.0]])
     b = Tensor([10.0, 20.0])
     c = a + b
@@ -16,6 +16,24 @@ def test_broadcasting():
     b = torch.tensor([10.0, 20.0], dtype=torch.double, requires_grad=True)
     c = a + b
     d = c * b
+    d.sum().backward()
+
+    assert np.allclose(dmg.data, d.detach().numpy(), tol)
+    assert np.allclose(amg.grad, a.grad.numpy(), tol)
+    assert np.allclose(bmg.grad, b.grad.numpy(), tol)
+
+def test_mul_broadcasting():
+    a = Tensor([[1.0, 2.0], [3.0, 4.0]])
+    b = Tensor([10.0, 20.0])
+    c = a * b
+    d = c + b
+    d.backward()
+    amg, bmg, dmg = a, b, d
+
+    a = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.double, requires_grad=True)
+    b = torch.tensor([10.0, 20.0], dtype=torch.double, requires_grad=True)
+    c = a * b
+    d = c + b
     d.sum().backward()
 
     assert np.allclose(dmg.data, d.detach().numpy(), tol)
@@ -197,18 +215,42 @@ def test_more_ops():
     assert abs(amg.grad - apt.grad.item()) < tol
     assert abs(bmg.grad - bpt.grad.item()) < tol
 
+def test_neuron():
+    X_data = np.random.uniform(-1, 1, (16, 16))
+    W_data = np.random.uniform(-1, 1, (16, 1))
+    b_data = np.random.uniform(-1, 1, (1))
+    
+    X_m = Tensor(X_data)
+    W_m = Tensor(W_data)
+    b_m = Tensor(b_data)
+    z_m = (X_m @ W_m) + b_m
+    z_m.backward()
+    
+    X_pt = torch.tensor(X_data, dtype=torch.double, requires_grad=True)
+    W_pt = torch.tensor(W_data, dtype=torch.double, requires_grad=True)
+    b_pt = torch.tensor(b_data, dtype=torch.double, requires_grad=True)
+    z_pt = (X_pt @ W_pt) + b_pt
+    z_pt.sum().backward()
+    
+    assert np.allclose(z_m.data, z_pt.detach().numpy(), tol)
+    assert np.allclose(X_m.grad, X_pt.grad.numpy(), tol)
+    assert np.allclose(W_m.grad, W_pt.grad.numpy(), tol)
+    assert np.allclose(b_m.grad, b_pt.grad.numpy(), tol)
+    
 if __name__ == "__main__":
     import traceback
 
     test_list = [
-        test_sanity_check,
-        test_more_ops,
-        test_broadcasting,
+        test_add_broadcasting,
+        test_mul_broadcasting,
         test_transpose,
         test_matmul,
         test_pow,
         test_activations,
         test_exp_log,
+        test_sanity_check,
+        test_more_ops,
+        test_neuron,
     ]
 
     for test in test_list:

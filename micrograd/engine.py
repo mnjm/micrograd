@@ -17,6 +17,12 @@ class Tensor:
     def ndim(self):
         return self.data.ndim
 
+    def __len__(self):
+        return len(self.data)
+    
+    def numel(self):
+        return np.prod(self.shape)
+    
     def __repr__(self):
         return f"Tensor(value={self.data}, shape={self.shape}, grad={self.grad})"
 
@@ -160,7 +166,18 @@ class Tensor:
         def _backward():
             _accumulate_grad_handle_broadcasting(self, out.data * (1 - out.data) * out.grad)
         out._backward = _backward
-
+        
+        return out
+    
+    def sum(self):
+        out = Tensor(np.sum(self.data), (self,), "Sum")
+        
+        def _backward():
+            # The gradient of sum is 1 for all input elements
+            grad = np.ones_like(self.data) * out.grad
+            _accumulate_grad_handle_broadcasting(self, grad)
+        
+        out._backward = _backward
         return out
 
     def __truediv__(self, other):

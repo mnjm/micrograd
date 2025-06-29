@@ -1,5 +1,3 @@
-import numpy as np
-
 def _accumulate_grad_handle_broadcasting(tensor, grad):
     """ Handle gradient accumulation with proper broadcasting. """
     if tensor.grad.shape == grad.shape:
