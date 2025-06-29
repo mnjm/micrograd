@@ -7,8 +7,8 @@ def _accumulate_grad_handle_broadcasting(tensor, grad):
         # Handle broadcasting by summing over expanded dimensions
         if grad.shape != tensor.shape:
             # Find axes that were broadcasted
-            grad = np.sum(grad, axis=tuple(i for i, (a, b) in enumerate(zip(grad.shape, tensor.shape)) if a != b), keepdims=True)
-            grad = grad.reshape(tensor.shape)
+            axes = tuple(i for i, (a, b) in enumerate(zip(grad.shape, tensor.shape)) if a != b)
+            grad = np.sum(grad, axis=axes, keepdims=True).reshape(tensor.shape)
         tensor.grad += grad
 
 class Tensor:
@@ -109,6 +109,51 @@ class Tensor:
             self.grad += (1 / x) * out.grad
         out._backward = _backward
         
+        return out
+    
+    def transpose(self):
+        out = Tensor(self.data.T, (self,), "T")
+        
+        def _backward():
+            self.grad += out.grad.T
+        out._backward = _backward
+
+        return out
+
+    @property
+    def T(self):
+        return self.transpose()
+    
+    def __matmul__(self, other):
+        other = other if isinstance(other, Tensor) else Tensor(other)
+
+        # Check matrix compatibility
+        assert self.ndim != 0 and other.ndim != 0, "Scalars cannot be matrix-multiplied"
+        if self.ndim == 1 and other.ndim == 1: # Dot product
+            out_data = np.dot(self.data, other.data)
+        else:
+            try:
+                out_data = self.data @ other.data
+            except ValueError as e:
+                raise ValueError(f"Shape mismatch in matmul: {self.shape} vs {other.shape}") from e
+
+        out = Tensor(out_data, (self, other), "@")
+
+        def _backward():
+            if self.ndim == 1 and other.ndim == 1:  # Both vectors
+                _accumulate_grad_handle_broadcasting(self, out.grad * other.data)
+                _accumulate_grad_handle_broadcasting(other, out.grad * self.data)
+            elif self.ndim == 1:  # Vector @ Matrix case
+                _accumulate_grad_handle_broadcasting(self, (out.grad @ other.data.T).squeeze())
+                _accumulate_grad_handle_broadcasting(other, np.outer(self.data, out.grad))
+            elif other.ndim == 1:  # Matrix @ Vector case
+                _accumulate_grad_handle_broadcasting(self, np.outer(out.grad, other.data))
+                _accumulate_grad_handle_broadcasting(other, (self.data.T @ out.grad).squeeze())
+            else:  # Matrix @ Matrix case
+                _accumulate_grad_handle_broadcasting(self, out.grad @ other.data.T)
+                _accumulate_grad_handle_broadcasting(other, self.data.T @ out.grad)
+
+        out._backward = _backward
         return out
     
     def sigmoid(self):
