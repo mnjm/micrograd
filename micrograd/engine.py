@@ -144,6 +144,18 @@ class Tensor:
         
         out._backward = _backward
         return out
+    
+    def __getitem__(self, key): # Indexing support
+        out_data = self.data[key]
+        out = Tensor(out_data, (self,), f"[{key}]")
+
+        def _backward():
+            grad_input = np.zeros_like(self.data)
+            grad_input[key] = out.grad
+            _accumulate_grad_handle_broadcasting(self, grad_input)
+        out._backward = _backward
+        
+        return out
 
     def __truediv__(self, other):
         return self * other**-1

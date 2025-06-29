@@ -1,1 +1,1 @@
-karpathy's micrograd repro - to learn
+Micrograd with tensor support
