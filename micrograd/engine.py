@@ -1,32 +1,9 @@
 import numpy as np
-
-def accumulate_grad_handle_broadcasting(tensor, grad):
-    """ Handle gradient accumulation with proper broadcasting. """
-    if tensor.grad.shape == grad.shape:
-        tensor.grad += grad
-    else:
-        # Handle broadcasting by summing over broadcasted dimensions
-        # and reshaping to match the original tensor's shape
-        grad_copy = grad.copy()
-
-        # Sum over dimensions that were broadcasted
-        ndims_added = grad.ndim - tensor.grad.ndim
-        for _ in range(ndims_added):
-            grad_copy = grad_copy.sum(axis=0)
-
-        # Sum over dimensions that were size 1 in original tensor
-        for i, (grad_dim, orig_dim) in enumerate(
-            zip(grad_copy.shape, tensor.grad.shape)
-        ):
-            if orig_dim == 1 and grad_dim > 1:
-                grad_copy = grad_copy.sum(axis=i, keepdims=True)
-
-        tensor.grad += grad_copy
-
+from micrograd import _accumulate_grad_handle_broadcasting
 
 class Tensor:
     def __init__(self, data, _children=(), _op=""):
-        self.data = np.asarray(data)
+        self.data = np.asarray(data, dtype=np.float64)
         self.grad = np.zeros_like(self.data)
         self._backward = lambda: None
         self._prev = set(_children)
@@ -53,8 +30,8 @@ class Tensor:
         out = Tensor(out_data, (self, other), "+")
 
         def _backward():
-            accumulate_grad_handle_broadcasting(self, out.grad)
-            accumulate_grad_handle_broadcasting(other, out.grad)
+            _accumulate_grad_handle_broadcasting(self, out.grad)
+            _accumulate_grad_handle_broadcasting(other, out.grad)
         out._backward = _backward
 
         return out
@@ -64,8 +41,8 @@ class Tensor:
         out = Tensor(self.data * other.data, (self, other), "*")
 
         def _backward():
-            accumulate_grad_handle_broadcasting(self, out.grad * other.data)
-            accumulate_grad_handle_broadcasting(other, out.grad * self.data)
+            _accumulate_grad_handle_broadcasting(self, out.grad * other.data)
+            _accumulate_grad_handle_broadcasting(other, out.grad * self.data)
         out._backward = _backward
 
         return out
@@ -77,10 +54,10 @@ class Tensor:
         def _backward():
             # da of a^b = b * a^(b-1) | Handle a=0 case by zeroing gradient
             base_grad = (out.grad * other.data * np.where(self.data != 0, self.data ** (other.data - 1), 0.0))
-            accumulate_grad_handle_broadcasting(self, base_grad)
+            _accumulate_grad_handle_broadcasting(self, base_grad)
             # db of a^b = a^b * ln(a) | Handle a<=0 case by zeroing gradient
             exp_grad = out.grad * np.where(self.data > 0, out.data * np.log(np.maximum(self.data, 1e-8)), 0.0)
-            accumulate_grad_handle_broadcasting(other, exp_grad)
+            _accumulate_grad_handle_broadcasting(other, exp_grad)
         out._backward = _backward
 
         return out
@@ -91,7 +68,7 @@ class Tensor:
         out = Tensor(t, (self,), "TanH")
 
         def _backward():
-            accumulate_grad_handle_broadcasting(self, (1 - t**2) * out.grad)
+            _accumulate_grad_handle_broadcasting(self, (1 - t**2) * out.grad)
         out._backward = _backward
 
         return out
@@ -100,7 +77,7 @@ class Tensor:
         out = Tensor(np.maximum(0, self.data), (self,), "ReLU")
 
         def _backward():
-            accumulate_grad_handle_broadcasting(self, (out.data > 0) * out.grad)
+            _accumulate_grad_handle_broadcasting(self, (out.data > 0) * out.grad)
         out._backward = _backward
 
         return out
@@ -109,7 +86,7 @@ class Tensor:
         out = Tensor(np.exp(self.data), (self,), "Exp")
 
         def _backward():
-            accumulate_grad_handle_broadcasting(self, out.data * out.grad)
+            _accumulate_grad_handle_broadcasting(self, out.data * out.grad)
         out._backward = _backward
 
         return out
@@ -119,7 +96,7 @@ class Tensor:
         out = Tensor(np.log(x), (self,), "Log")
 
         def _backward():
-            accumulate_grad_handle_broadcasting(self, (1 / x) * out.grad)
+            _accumulate_grad_handle_broadcasting(self, (1 / x) * out.grad)
         out._backward = _backward
 
         return out
@@ -128,7 +105,7 @@ class Tensor:
         out = Tensor(self.data.T, (self,), "T")
 
         def _backward():
-            accumulate_grad_handle_broadcasting(self, out.grad.T)
+            _accumulate_grad_handle_broadcasting(self, out.grad.T)
         out._backward = _backward
 
         return out
@@ -156,23 +133,23 @@ class Tensor:
 
         def _backward():
             if self.ndim == 1 and other.ndim == 1:  # Both vectors
-                accumulate_grad_handle_broadcasting(self, out.grad * other.data)
-                accumulate_grad_handle_broadcasting(other, out.grad * self.data)
+                _accumulate_grad_handle_broadcasting(self, out.grad * other.data)
+                _accumulate_grad_handle_broadcasting(other, out.grad * self.data)
             elif self.ndim == 1:  # Vector @ Matrix case
                 grad_self = out.grad @ other.data.T
                 if grad_self.ndim > 1:
                     grad_self = grad_self.squeeze()
-                accumulate_grad_handle_broadcasting(self, grad_self)
-                accumulate_grad_handle_broadcasting(other, np.outer(self.data, out.grad))
+                _accumulate_grad_handle_broadcasting(self, grad_self)
+                _accumulate_grad_handle_broadcasting(other, np.outer(self.data, out.grad))
             elif other.ndim == 1:  # Matrix @ Vector case
-                accumulate_grad_handle_broadcasting(self, np.outer(out.grad, other.data))
+                _accumulate_grad_handle_broadcasting(self, np.outer(out.grad, other.data))
                 grad_other = self.data.T @ out.grad
                 if grad_other.ndim > 1:
                     grad_other = grad_other.squeeze()
-                accumulate_grad_handle_broadcasting(other, grad_other)
+                _accumulate_grad_handle_broadcasting(other, grad_other)
             else:  # Matrix @ Matrix case
-                accumulate_grad_handle_broadcasting(self, out.grad @ other.data.T)
-                accumulate_grad_handle_broadcasting(other, self.data.T @ out.grad)
+                _accumulate_grad_handle_broadcasting(self, out.grad @ other.data.T)
+                _accumulate_grad_handle_broadcasting(other, self.data.T @ out.grad)
         out._backward = _backward
         
         return out
@@ -181,7 +158,7 @@ class Tensor:
         out = Tensor(1 / (1 + np.exp(-self.data)), (self,), "Sigmoid")
 
         def _backward():
-            accumulate_grad_handle_broadcasting(self, out.data * (1 - out.data) * out.grad)
+            _accumulate_grad_handle_broadcasting(self, out.data * (1 - out.data) * out.grad)
         out._backward = _backward
 
         return out

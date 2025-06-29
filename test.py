@@ -214,9 +214,14 @@ if __name__ == "__main__":
     for test in test_list:
         try:
             test()
-        except:
+        except:  # noqa: E722
+            print("\n==========")
             print(f"Failed - {test.__name__}")
+            print("-----------")
             traceback.print_exc()
+            print("==========\n")
             break
     else:
+        print("\n==========")
         print("All test passed")
+        print("==========\n")
