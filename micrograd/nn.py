@@ -12,15 +12,14 @@ class Module:
 
 class Layer(Module):
     def __init__(self, n_inp, n_out, act=None):
-        # Glorot init
-        scale = np.sqrt(2.0 / (n_inp + n_out))
+        scale = 1.0
         self.weights = Tensor(np.random.uniform(-scale, scale, (n_inp, n_out)))
         self.bias = Tensor(np.zeros((n_out)))
         self.act = act
-        assert (self.act in [None, 'relu', 'tanh', 'sigmoid']), "Unknown activation"
 
     def __call__(self, x):
         out = (x @ self.weights) + self.bias
+        assert (self.act in [None, 'relu', 'tanh', 'sigmoid']), "Unknown activation"
         if self.act == 'relu':
             out = out.relu()
         elif self.act == 'tanh':

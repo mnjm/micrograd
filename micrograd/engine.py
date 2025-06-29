@@ -16,12 +16,20 @@ class Tensor:
     @property
     def ndim(self):
         return self.data.ndim
+    
 
     def __len__(self):
         return len(self.data)
     
     def numel(self):
         return np.prod(self.shape)
+    
+    @property
+    def item(self):
+        if self.numel() == 1:
+            return self.data.reshape(-1)[0]
+        else:
+            return self.data
     
     def __repr__(self):
         return f"Tensor(value={self.data}, shape={self.shape}, grad={self.grad})"
