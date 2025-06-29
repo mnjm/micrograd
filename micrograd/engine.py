@@ -4,10 +4,11 @@ def _accumulate_grad_handle_broadcasting(tensor, grad):
     if tensor.shape == ():  # scalar
         tensor.grad += np.sum(grad)
     else:
-        # Special case of broadcasting for example T(2, 3) and T(3) handle by broadcasting by summing over expanded dimensions
+        # Handle broadcasting by summing over expanded dimensions
         if grad.shape != tensor.shape:
-            axes = tuple(range(len(grad.shape) - len(tensor.shape)))
-            grad = np.sum(grad, axis=axes, keepdims=True).reshape(tensor.shape)
+            # Find axes that were broadcasted
+            grad = np.sum(grad, axis=tuple(i for i, (a, b) in enumerate(zip(grad.shape, tensor.shape)) if a != b), keepdims=True)
+            grad = grad.reshape(tensor.shape)
         tensor.grad += grad
 
 class Tensor:
@@ -83,7 +84,7 @@ class Tensor:
         return out
     
     def relu(self):
-        out = Tensor(0 if self.data < 0 else self.data, (self,), "ReLU")
+        out = Tensor(np.max(0, self.data), (self,), "ReLU")
         
         def _backward():
             self.grad += (out.data > 0) * out.grad
@@ -101,11 +102,11 @@ class Tensor:
         return out
     
     def log(self):
-        x = max(self.data, 1e-8)
+        x = np.max(self.data, 1e-8)
         out = Tensor(np.log(x), (self,), "Log")
         
         def _backward():
-            self.grad += (1 / out.data) * out.grad
+            self.grad += (1 / x) * out.grad
         out._backward = _backward
         
         return out
