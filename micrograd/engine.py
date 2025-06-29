@@ -1,53 +1,80 @@
-import math
+import numpy as np
 
-class Value:
-    def __init__(self, data, _children=(), _op="", lbl=""):
-        self.data = data
-        self.grad = 0.0
+def _accumulate_grad_handle_broadcasting(tensor, grad):
+    if tensor.shape == ():  # scalar
+        tensor.grad += np.sum(grad)
+    else:
+        # Special case of broadcasting for example T(2, 3) and T(3) handle by broadcasting by summing over expanded dimensions
+        if grad.shape != tensor.shape:
+            axes = tuple(range(len(grad.shape) - len(tensor.shape)))
+            grad = np.sum(grad, axis=axes, keepdims=True).reshape(tensor.shape)
+        tensor.grad += grad
+
+class Tensor:
+    def __init__(self, data, _children=(), _op=""):
+        self.data = np.asarray(data)
+        self.grad = np.zeros(self.data.shape)
         self._backward = lambda: None
         self._prev = set(_children)
         self._op = _op
-        self._lbl = lbl
+    
+    @property
+    def shape(self):
+        return self.data.shape
+
+    @property
+    def ndim(self):
+        return self.data.ndim
 
     def __repr__(self):
-        return f"Value(data={self.data}, grad={self.grad})"
+        return f"Tensor(value={self.data}, shape={self.shape}, grad={self.grad})"
 
     def __add__(self, other):
-        other = other if isinstance(other, Value) else Value(other)
-        out = Value(self.data + other.data, (self, other), "+")
+        other = other if isinstance(other, Tensor) else Tensor(other)
+        # Handle scalar addition by broadcasting
+        try:
+            out_data = self.data + other.data
+        except ValueError as e:
+            raise ValueError(f"Shape mismatch in addition: {self.data.shape} vs {other.data.shape}") from e
+        out = Tensor(out_data, (self, other), "+")
 
         def _backward():
-            self.grad += 1.0 * out.grad
-            other.grad += 1.0 * out.grad
+            _accumulate_grad_handle_broadcasting(self, out.grad)
+            _accumulate_grad_handle_broadcasting(other, out.grad)
         out._backward = _backward
         
         return out
 
     def __mul__(self, other):
-        other = other if isinstance(other, Value) else Value(other)
-        out = Value(self.data * other.data, (self, other), "*")
-
+        other = other if isinstance(other, Tensor) else Tensor(other)
+        out = Tensor(self.data * other.data, (self, other), "*")
+        
         def _backward():
-            self.grad += other.data * out.grad
-            other.grad += self.data * out.grad
+            _accumulate_grad_handle_broadcasting(self, out.grad * other.data)
+            _accumulate_grad_handle_broadcasting(other, out.grad * self.data)
         out._backward = _backward
         
         return out
     
     def __pow__(self, other):
-        assert isinstance(other, (int, float)), "only supports int/float powers for now"
-        out = Value(self.data**other, (self,), f"**{other}")
-
+        other = other if isinstance(other, Tensor) else Tensor(other)
+        out = Tensor(self.data ** other.data, (self, other), "**")
+        
         def _backward():
-            self.grad += other * self.data ** (other - 1) * out.grad
+            # da of a^b = b * a^(b-1) | Handle a=0 case by zeroing gradient
+            base_grad = (out.grad * other.data * np.where(self.data != 0, self.data ** (other.data - 1), 0.0))
+            _accumulate_grad_handle_broadcasting(self, base_grad)
+            # db of a^b = a^b * ln(a) | Handle a<=0 case by zeroing gradient
+            exp_grad = out.grad * np.where(self.data > 0, self.data**other.data * np.log(self.data), 0.0)
+            _accumulate_grad_handle_broadcasting(other, exp_grad)
         out._backward = _backward
-
+        
         return out
 
     def tanh(self):
-        e = math.exp(2 * self.data)
+        e = np.exp(2 * self.data)
         t = (e - 1) / (e + 1)
-        out = Value(t, (self,), "TanH")
+        out = Tensor(t, (self,), "TanH")
 
         def _backward():
             self.grad += (1 - t**2) * out.grad
@@ -56,7 +83,7 @@ class Value:
         return out
     
     def relu(self):
-        out = Value(0 if self.data < 0 else self.data, (self,), "ReLU")
+        out = Tensor(0 if self.data < 0 else self.data, (self,), "ReLU")
         
         def _backward():
             self.grad += (out.data > 0) * out.grad
@@ -65,7 +92,7 @@ class Value:
         return out
 
     def exp(self):
-        out = Value(math.exp(self.data), (self,), "Exp")
+        out = Tensor(np.exp(self.data), (self,), "Exp")
 
         def _backward():
             self.grad += out.data * out.grad
@@ -75,7 +102,7 @@ class Value:
     
     def log(self):
         x = max(self.data, 1e-8)
-        out = Value(math.log(x), (self,), "Log")
+        out = Tensor(np.log(x), (self,), "Log")
         
         def _backward():
             self.grad += (1 / out.data) * out.grad
@@ -84,7 +111,7 @@ class Value:
         return out
     
     def sigmoid(self):
-        out = Value(1 / (1 + math.exp(-self.data)), (self,), "Sigmoid")
+        out = Tensor(1 / (1 + np.exp(-self.data)), (self,), "Sigmoid")
         
         def _backward():
             self.grad += out.data * (1 - out.data) * out.grad
