@@ -1,9 +1,9 @@
 # Source: https://github.com/karpathy/micrograd/blob/master/test/test_engine.py
 import torch
-from micrograd.engine import Value
+from micrograd.engine import Tensor
 
 def test_sanity_check():
-    x = Value(-4.0)
+    x = Tensor(-4.0)
     z = 2 * x + 2 + x
     q = z.relu() + z * x
     h = (z * z).relu()
@@ -27,8 +27,8 @@ def test_sanity_check():
 
 
 def test_more_ops():
-    a = Value(-4.0)
-    b = Value(2.0)
+    a = Tensor(-4.0)
+    b = Tensor(2.0)
     c = a + b
     d = a * b + b**3
     c += c + 1

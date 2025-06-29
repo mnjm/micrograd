@@ -66,7 +66,7 @@ class Tensor:
             base_grad = (out.grad * other.data * np.where(self.data != 0, self.data ** (other.data - 1), 0.0))
             _accumulate_grad_handle_broadcasting(self, base_grad)
             # db of a^b = a^b * ln(a) | Handle a<=0 case by zeroing gradient
-            exp_grad = out.grad * np.where(self.data > 0, self.data**other.data * np.log(self.data), 0.0)
+            exp_grad = out.grad * np.where(self.data > 0, self.data**other.data * np.log(np.maximum(self.data,1e-8)), 0.0)
             _accumulate_grad_handle_broadcasting(other, exp_grad)
         out._backward = _backward
         
@@ -84,7 +84,7 @@ class Tensor:
         return out
     
     def relu(self):
-        out = Tensor(np.max(0, self.data), (self,), "ReLU")
+        out = Tensor(np.maximum(0, self.data), (self,), "ReLU")
         
         def _backward():
             self.grad += (out.data > 0) * out.grad
@@ -102,7 +102,7 @@ class Tensor:
         return out
     
     def log(self):
-        x = np.max(self.data, 1e-8)
+        x = np.maximum(self.data, 1e-8)
         out = Tensor(np.log(x), (self,), "Log")
         
         def _backward():
@@ -185,6 +185,26 @@ class Tensor:
     
     def __rtruediv__(self, other):
         return other * self**-1
+
+    def __iadd__(self, other):
+        other = other if isinstance(other, Tensor) else Tensor(other)
+        out = self + other
+        self.data = out.data
+        self.grad = out.grad
+        self._backward = out._backward
+        self._prev = out._prev
+        self._op = out._op
+        return self
+    
+    def __isub__(self, other):
+        other = other if isinstance(other, Tensor) else Tensor(other)
+        out = self - other
+        self.data = out.data
+        self.grad = out.grad
+        self._backward = out._backward
+        self._prev = out._prev
+        self._op = out._op
+        return self
 
     def backward(self):
         # build topological graph of all the children
