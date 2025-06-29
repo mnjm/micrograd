@@ -151,7 +151,7 @@ def test_exp_log():
 
     assert np.allclose(cmg.data, c.detach().numpy(), tol)
     assert np.allclose(amg.grad, a.grad.numpy(), tol)
-    
+
 # Adapted from - https://github.com/karpathy/micrograd/blob/master/test/test_engine.py
 def test_sanity_check():
     x = Tensor(-4.0)
@@ -219,24 +219,64 @@ def test_neuron():
     X_data = np.random.uniform(-1, 1, (16, 16))
     W_data = np.random.uniform(-1, 1, (16, 1))
     b_data = np.random.uniform(-1, 1, (1))
-    
+
     X_m = Tensor(X_data)
     W_m = Tensor(W_data)
     b_m = Tensor(b_data)
     z_m = (X_m @ W_m) + b_m
     z_m.backward()
-    
+
     X_pt = torch.tensor(X_data, dtype=torch.double, requires_grad=True)
     W_pt = torch.tensor(W_data, dtype=torch.double, requires_grad=True)
     b_pt = torch.tensor(b_data, dtype=torch.double, requires_grad=True)
     z_pt = (X_pt @ W_pt) + b_pt
     z_pt.sum().backward()
-    
+
     assert np.allclose(z_m.data, z_pt.detach().numpy(), tol)
     assert np.allclose(X_m.grad, X_pt.grad.numpy(), tol)
     assert np.allclose(W_m.grad, W_pt.grad.numpy(), tol)
     assert np.allclose(b_m.grad, b_pt.grad.numpy(), tol)
-    
+
+def test_log_softmax():
+    # Test 1D case
+    a = Tensor([0.1, 1.0, 2.0])
+    b = a.log_softmax()
+    b.backward()
+    amg, bmg = a, b
+
+    a_pt = torch.tensor([0.1, 1.0, 2.0], dtype=torch.double, requires_grad=True)
+    b_pt = torch.log_softmax(a_pt, dim=0)
+    b_pt.sum().backward()
+
+    assert np.allclose(bmg.data, b_pt.detach().numpy(), atol=tol)
+    assert np.allclose(amg.grad, a_pt.grad.numpy(), atol=tol)
+
+    # Test 1xN
+    a = Tensor([[0.1, 1.0, 2.0]])
+    b = a.log_softmax()
+    b.backward()
+    amg, bmg = a, b
+
+    a_pt = torch.tensor([[0.1, 1.0, 2.0]], dtype=torch.double, requires_grad=True)
+    b_pt = torch.log_softmax(a_pt, dim=1)
+    b_pt.sum().backward()
+
+    assert np.allclose(bmg.data, b_pt.detach().numpy(), atol=tol)
+    assert np.allclose(amg.grad, a_pt.grad.numpy(), atol=tol)
+
+    # Test Nx1
+    a = Tensor([[0.1], [1.0], [2.0]])
+    b = a.log_softmax()
+    b.backward()
+    amg, bmg = a, b
+
+    a_pt = torch.tensor([[0.1], [1.0], [2.0]], dtype=torch.double, requires_grad=True)
+    b_pt = torch.log_softmax(a_pt, dim=0)
+    b_pt.sum().backward()
+
+    assert np.allclose(bmg.data, b_pt.detach().numpy(), atol=tol)
+    assert np.allclose(amg.grad, a_pt.grad.numpy(), atol=tol)
+
 if __name__ == "__main__":
     import traceback
 
@@ -251,6 +291,7 @@ if __name__ == "__main__":
         test_sanity_check,
         test_more_ops,
         test_neuron,
+        test_log_softmax,
     ]
 
     for test in test_list:

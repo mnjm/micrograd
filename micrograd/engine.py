@@ -16,7 +16,6 @@ class Tensor:
     @property
     def ndim(self):
         return self.data.ndim
-    
 
     def __len__(self):
         return len(self.data)
@@ -26,10 +25,7 @@ class Tensor:
     
     @property
     def item(self):
-        if self.numel() == 1:
-            return self.data.reshape(-1)[0]
-        else:
-            return self.data
+        return self.data.reshape(-1)[0] if self.numel() == 0 else self.data
     
     def __repr__(self):
         return f"Tensor(value={self.data}, shape={self.shape}, grad={self.grad})"
@@ -75,46 +71,7 @@ class Tensor:
         out._backward = _backward
 
         return out
-
-    def tanh(self):
-        e = np.exp(2 * self.data)
-        t = (e - 1) / (e + 1)
-        out = Tensor(t, (self,), "TanH")
-
-        def _backward():
-            _accumulate_grad_handle_broadcasting(self, (1 - t**2) * out.grad)
-        out._backward = _backward
-
-        return out
-
-    def relu(self):
-        out = Tensor(np.maximum(0, self.data), (self,), "ReLU")
-
-        def _backward():
-            _accumulate_grad_handle_broadcasting(self, (out.data > 0) * out.grad)
-        out._backward = _backward
-
-        return out
-
-    def exp(self):
-        out = Tensor(np.exp(self.data), (self,), "Exp")
-
-        def _backward():
-            _accumulate_grad_handle_broadcasting(self, out.data * out.grad)
-        out._backward = _backward
-
-        return out
-
-    def log(self):
-        x = np.maximum(self.data, 1e-8)
-        out = Tensor(np.log(x), (self,), "Log")
-
-        def _backward():
-            _accumulate_grad_handle_broadcasting(self, (1 / x) * out.grad)
-        out._backward = _backward
-
-        return out
-
+    
     def transpose(self):
         out = Tensor(self.data.T, (self,), "T")
 
@@ -208,6 +165,64 @@ class Tensor:
 
     def __rtruediv__(self, other):
         return other * self**-1
+
+    def tanh(self):
+        e = np.exp(2 * self.data)
+        t = (e - 1) / (e + 1)
+        out = Tensor(t, (self,), "TanH")
+
+        def _backward():
+            _accumulate_grad_handle_broadcasting(self, (1 - t**2) * out.grad)
+        out._backward = _backward
+
+        return out
+
+    def relu(self):
+        out = Tensor(np.maximum(0, self.data), (self,), "ReLU")
+
+        def _backward():
+            _accumulate_grad_handle_broadcasting(self, (out.data > 0) * out.grad)
+        out._backward = _backward
+
+        return out
+
+    def exp(self):
+        out = Tensor(np.exp(self.data), (self,), "Exp")
+
+        def _backward():
+            _accumulate_grad_handle_broadcasting(self, out.data * out.grad)
+        out._backward = _backward
+
+        return out
+
+    def log(self):
+        x = np.maximum(self.data, 1e-8)
+        out = Tensor(np.log(x), (self,), "Log")
+
+        def _backward():
+            _accumulate_grad_handle_broadcasting(self, (1 / x) * out.grad)
+        out._backward = _backward
+
+        return out
+    
+    def log_softmax(self):
+        assert self.ndim <= 2 and (self.ndim == 1 or 1 in self.shape), "LogSoftmax requires 1D or 2D (1,n)/(n,1) tensor"
+        
+        # Numerically stable log-softmax
+        x = self.data.reshape(-1)
+        x_max = np.max(x)
+        log_sum_exp = np.log(np.sum(np.exp(x - x_max))) + x_max
+        out = Tensor((x - log_sum_exp).reshape(self.shape), (self,), "LogSoftmax")
+        
+        def _backward():
+            # Gradient of log_softmax: dL/dx_i = dL/dy_i - softmax * sum(dL/dy_j)
+            g = out.grad.reshape(-1)
+            s = np.exp(out.data.reshape(-1))  # softmax values
+            grad = g - s * g.sum()
+            _accumulate_grad_handle_broadcasting(self, grad.reshape(self.shape))
+            
+        out._backward = _backward
+        return out
 
     def backward(self):
         # build topological graph of all the children
