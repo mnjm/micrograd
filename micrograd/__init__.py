@@ -13,9 +13,7 @@ def _accumulate_grad_handle_broadcasting(tensor, grad):
             grad_copy = grad_copy.sum(axis=0)
 
         # Sum over dimensions that were size 1 in original tensor
-        for i, (grad_dim, orig_dim) in enumerate(
-            zip(grad_copy.shape, tensor.grad.shape)
-        ):
+        for i, (grad_dim, orig_dim) in enumerate(zip(grad_copy.shape, tensor.grad.shape)):
             if orig_dim == 1 and grad_dim > 1:
                 grad_copy = grad_copy.sum(axis=i, keepdims=True)
 

@@ -25,7 +25,7 @@ class Tensor:
     
     @property
     def item(self):
-        return self.data.reshape(-1)[0] if self.numel() == 0 else self.data
+        return self.data.reshape(-1)[0] if self.numel() == 1 else self.data
     
     def __repr__(self):
         return f"Tensor(value={self.data}, shape={self.shape}, grad={self.grad})"
