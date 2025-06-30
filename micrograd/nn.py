@@ -11,8 +11,8 @@ class Module:
         return []
 
 class Layer(Module):
-    def __init__(self, n_inp, n_out, act=None):
-        scale = 1.0
+    def __init__(self, n_inp, n_out, act=None, init=None):
+        scale = np.sqrt(2.0 / (n_inp + n_out)) if init == "glorot" else 1.0
         self.weights = Tensor(np.random.uniform(-scale, scale, (n_inp, n_out)))
         self.bias = Tensor(np.zeros((n_out)))
         self.act = act
@@ -35,9 +35,9 @@ class Layer(Module):
         return f"Layer({len(self.bias)}, act={self.act})"
 
 class MultiLayerPerceptron(Module):
-    def __init__(self, n_inp, n_outs):
+    def __init__(self, n_inp, n_outs, **kwargs):
         sz = [n_inp] + n_outs
-        self.layers = [ Layer(sz[i], sz[i + 1], act=None if i==len(n_outs)-1 else 'relu') for i in range(len(n_outs)) ]
+        self.layers = [ Layer(sz[i], sz[i + 1], act=None if i==len(n_outs)-1 else 'relu', **kwargs) for i in range(len(n_outs)) ]
 
     def __call__(self, x):
         for layer in self.layers:

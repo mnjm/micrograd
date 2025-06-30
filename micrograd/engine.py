@@ -96,9 +96,7 @@ class Tensor:
             try:
                 out_data = self.data @ other.data
             except ValueError as e:
-                raise ValueError(
-                    f"Shape mismatch in matmul: {self.shape} vs {other.shape}"
-                ) from e
+                raise ValueError(f"Shape mismatch in matmul: {self.shape} vs {other.shape}") from e
 
         out = Tensor(out_data, (self, other), "@")
 
